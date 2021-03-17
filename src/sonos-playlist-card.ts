@@ -8,7 +8,7 @@ import {
   TemplateResult,
   css,
   //PropertyValues,
-  internalProperty,
+  //internalProperty,
 } from 'lit-element';
 import {
   HomeAssistant,
@@ -19,8 +19,9 @@ import {
   //LovelaceCardEditor,
   getLovelace,
 } from 'custom-card-helpers'; // This is a community maintained npm module with common helper functions/types
-
 //import './editor';
+
+import { subscribeEntities, HassEntities } from 'home-assistant-js-websocket';
 
 import type { SonosPlaylistCardConfig, Playlist, PlaylistMessage } from './types';
 //import { actionHandler } from './action-handler-directive';
@@ -58,8 +59,10 @@ export class SonosPlaylistCard extends LitElement {
   // TODO Add any properities that should cause your element to re-render here
   // https://lit-element.polymer-project.org/guide/properties
   @property({ attribute: false }) public hass!: HomeAssistant;
-  @internalProperty() private config!: SonosPlaylistCardConfig;
+  @property({type: Object}) public config!: SonosPlaylistCardConfig;
   @property({type: Boolean}) playlistsLoaded = false;
+  private fetchTimeOut: any = 0;
+  private unsubscribeEntitites?: any;
 
   // https://lit-element.polymer-project.org/guide/properties#accessors-custom
   public setConfig(config: SonosPlaylistCardConfig): void {
@@ -78,6 +81,44 @@ export class SonosPlaylistCard extends LitElement {
     };
   }
 
+  connectedCallback(): void {
+    super.connectedCallback();
+    this.updateSpotcast();
+  }
+
+  public disconnectedCallback(): void {
+    super.disconnectedCallback();
+    if (this.unsubscribeEntitites) {
+      this.unsubscribeEntitites();
+      this.unsubscribeEntitites = undefined;
+    }
+  }
+
+  private updateSpotcast(): void {
+    // Debounce updates to 500ms
+    if (this.fetchTimeOut) {
+      clearTimeout(this.fetchTimeOut);
+    }
+    this.fetchTimeOut = setTimeout(async () => {
+      if (this.hass) {
+        //request update of spotcast data
+        await this._updatePlaylists();
+      }
+    }, 500);
+  }
+
+  public doSubscribeEntities(): void {
+    if (this.hass?.connection && !this.unsubscribeEntitites && this.isConnected) {
+      this.unsubscribeEntitites = subscribeEntities(this.hass.connection, (entities) =>
+        this.entitiesUpdated(entities)
+      );
+    }
+  }
+
+  private entitiesUpdated(entities: HassEntities): void {
+    console.log(entities);
+  }
+
   // https://lit-element.polymer-project.org/guide/templates
   protected render(): TemplateResult | void {
     // TODO Check for stateObj or other necessary things and render a warning if missing
@@ -89,27 +130,31 @@ export class SonosPlaylistCard extends LitElement {
       return this._showError(localize('common.show_error'));
     }
 
-    console.log("Rendering");
-
     return html`
       <ha-card
-        .header=${this.config.name}
         tabindex="0"
       >
-      ${this.playlistsLoaded?
-        html`
-          <p>Playlists: ${this.playlists.length}</p>
-          <ul>
-            ${this.playlists.map(i => html`<li>${i.name}</li>`)}
-          </ul>
-        `:
-        html`<p>Playlists not loaded</p>`}
-
-      <button @click="${this._updatePlaylists}">Update Playlist</button>
+      ${this.playlistsLoaded?html`
+          <div class="playlistcontainer">
+            ${this.playlists.map(i => html`
+              <div class="griditem" @click="${(): void => this._playPlaylist(i.uri)}"><img .src="${i.images[0].url}" ></div>
+            `)}
+          </div>
+        `:html`<p>Playlists not loaded</p>`}
       </ha-card>
     `;
   }
 
+  private _playPlaylist(identifier: string): void {
+      this.hass.callService("media_player", "play_media", {
+        // eslint-disable-next-line @typescript-eslint/camelcase
+        entity_id: this.config.player,
+        // eslint-disable-next-line @typescript-eslint/camelcase
+        media_content_id: identifier,
+        // eslint-disable-next-line @typescript-eslint/camelcase
+        media_content_type: "music"
+      });
+  }
 
   private _showWarning(warning: string): TemplateResult {
     return html`
@@ -135,29 +180,42 @@ export class SonosPlaylistCard extends LitElement {
       type: 'spotcast/playlists',
       // eslint-disable-next-line @typescript-eslint/camelcase
       playlist_type: this.config.playlist_type || '',
-      account: "default", // this.config.account,
-      limit: 10, //this.config.limit,
+      account: this.config.account || "default",
+      limit: this.config.limit || 10, //this.config.limit,
     };
     if (this.config.country_code) {
       // eslint-disable-next-line @typescript-eslint/camelcase
       message.country_code = this.config.country_code;
     }
-    console.info(message);
 
     try {
       const res: any = await this.hass.callWS(message) as Array<Playlist>;
-      console.log(res.items);
       this.playlists = res.items;
     } catch (e) {
       throw Error('Failed to fetch playlists: ' + e);
     } finally {
       this.playlistsLoaded = true;
-      console.log("Loaded: " + this.playlistsLoaded);
     }
   }
 
   // https://lit-element.polymer-project.org/guide/styles
   static get styles(): CSSResult {
-    return css``;
+    return css`
+      div.playlistcontainer {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(30%, 1fr));
+        grid-gap: 0.2em;
+        margin: 0.5em;
+      }
+
+      div.griditem {
+        position: flex;
+        cursor: pointer;
+      }
+
+      div.griditem > img {
+        width: 100%;
+      }
+    `;
   }
 }
