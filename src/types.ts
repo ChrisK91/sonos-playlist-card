@@ -19,6 +19,7 @@ export interface SonosPlaylistCardConfig extends LovelaceCardConfig {
   playlist_type?: string;
   account?: string;
   limit?: number;
+  gridWidth?: number;
 }
 
 interface Message {
