@@ -2,7 +2,7 @@
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge)](https://github.com/custom-components/hacs)
 
-This is an experimental using the Spotcast add on, to play your spotify playlists on sonos speakers. It is heavily influenced by [https://github.com/custom-cards/spotify-card](spotify-card), and relies on the [https://github.com/fondberg/spotcast](spotcast) connector to query the playlists.
+This is an experimental using the Spotcast add on, to play your spotify playlists on sonos speakers. It is heavily influenced by [spotify-card](https://github.com/custom-cards/spotify-card), and relies on the [spotcast](https://github.com/fondberg/spotcast) connector to query the playlists.
 
 When clicking a playlist, the "media_player.play" service will be called, with the id of the desired playlist.
 
